@@ -2,7 +2,7 @@ module HTMLVisualizers
 
 using JSON
 
-export html, view, vega_spec,
+export html, open_in_browser, vega_spec,
        Edge, Node, SankeyConfig, SankeySpec
 
 include("utils.jl")
@@ -21,11 +21,11 @@ returns the html code of the plot described by `spec` as a `String`.
 function html end
 
 """
-    view(spec::HTMLVisualizerSpec)
+    open_in_browser(spec::HTMLVisualizerSpec)
 
-Generates and open the visualization in the system browser.
+Generates and opens the visualization in the system browser.
 """
-function view(spec::HTMLVisualizerSpec)
+function open_in_browser(spec::HTMLVisualizerSpec)
     filepath = tempname() * ".html"
     write(filepath, html(spec))
     open_file(filepath)

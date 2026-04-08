@@ -60,7 +60,7 @@ end
     SankeySpec(edges::Vector{Edge}; title="", config=SankeyConfig())
     SankeySpec(nodes::Vector{Node}, edges::Vector{Edge}; title="", config=SankeyConfig())
 
-A complete Sankey diagram specification. Pass to `html` or `view` to render.
+A complete Sankey diagram specification. Pass to `html` or `open_in_browser` to render.
 When `nodes` are omitted, they are derived from the edges automatically via
 longest-path layering.
 """
