@@ -1,0 +1,16 @@
+name = "HTMLVisualizers"
+uuid = "355f4dba-f457-4904-b421-9a36b98c3c66"
+version = "0.1.0"
+authors = ["Jon Alm Eriksen <jon.alm.eriksen@protonmail.com>"]
+
+[deps]
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+
+[compat]
+JSON = "1.5.0"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

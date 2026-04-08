@@ -1,0 +1,1 @@
+I want more plots, similary to the sankey plot, to be visualized with the same api. I want all these plots to be fully specified by a struct which is sub type of 
