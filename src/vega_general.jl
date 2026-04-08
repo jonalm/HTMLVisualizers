@@ -1,11 +1,24 @@
 
 
 """
-    vega_spec(spec::VegaVisualizerSpec)::Dict{Any, String}
+    vega_spec(spec::VegaVisualizerSpec)::Dict{String, Any}
 
 returns vega spec into a dict.
 """
 function vega_spec end
+
+
+"""
+    svg(spec::VegaVisualizerSpec)::String
+
+Render `spec` to an SVG string by piping its Vega JSON through the external
+`vg2svg` command (from the `vega-cli` npm package — install with
+`npm install -g vega-cli`). Throws if `vg2svg` is not on `PATH`.
+"""
+function svg(spec::VegaVisualizerSpec)::String
+    vspec_json = JSON.json(vega_spec(spec))
+    read(pipeline(`vg2svg`, stdin=IOBuffer(vspec_json)), String)
+end
 
 
 """
@@ -19,7 +32,10 @@ function html(spec::VegaVisualizerSpec)::String
     vspec = vega_spec(spec)
     page_title = get(get(vspec, "title", Dict()), "text", "")
     isempty(page_title) && (page_title = "Visualization")
-    config_json = JSON.json(vspec)
+    page_title = replace(page_title, "&" => "&amp;", "<" => "&lt;")
+    # Escape `</` as `<\/` so a string inside the JSON payload can't terminate
+    # the surrounding <script> block. `<\/` parses identically to `</` in JSON.
+    config_json = replace(JSON.json(vspec), "</" => "<\\/")
 
     """
     <!DOCTYPE html>

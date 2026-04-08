@@ -1,7 +1,7 @@
 
 
 """
-    Edge(source, destination, value)
+    SankeyEdge(source, destination, value)
 
 A weighted edge in the Sankey diagram.
 
@@ -10,14 +10,15 @@ A weighted edge in the Sankey diagram.
 - `destination::String`: Destination node id
 - `value::Number`: Edge weight (determines thickness of flow)
 """
-struct Edge
+struct SankeyEdge
     source::String
     destination::String
     value::Number
 end
+SankeyEdge(tuple) = SankeyEdge(tuple...)
 
 """
-    Node(id, stack; sort=nothing, labels=nothing, gap=nothing)
+    SankeyNode(id, stack; sort=nothing, labels=nothing, gap=nothing)
 
 A node in the Sankey diagram. Only needed for fine-grained control over layout.
 
@@ -28,7 +29,7 @@ A node in the Sankey diagram. Only needed for fine-grained control over layout.
 - `labels::Union{String,Nothing}`: Label position ("left" or "right")
 - `gap::Union{Int,Nothing}`: Extra gap above this node (percentage of domain)
 """
-struct Node
+struct SankeyNode
     id::String
     stack::Int
     sort::Union{Int,Nothing}
@@ -36,8 +37,8 @@ struct Node
     gap::Union{Int,Nothing}
 end
 
-Node(id::String, stack::Int; sort=nothing, labels=nothing, gap=nothing) =
-    Node(id, stack, sort, labels, gap)
+SankeyNode(id::String, stack::Int; sort=nothing, labels=nothing, gap=nothing) =
+    SankeyNode(id, stack, sort, labels, gap)
 
 """
     SankeyConfig
@@ -57,33 +58,42 @@ Base.@kwdef struct SankeyConfig
 end
 
 """
-    SankeySpec(edges::Vector{Edge}; title="", config=SankeyConfig())
-    SankeySpec(nodes::Vector{Node}, edges::Vector{Edge}; title="", config=SankeyConfig())
+    SankeySpec(edges::Vector{SankeyEdge}; title="", config=SankeyConfig())
+    SankeySpec(nodes::Vector{SankeyNode}, edges::Vector{SankeyEdge}; title="", config=SankeyConfig())
 
 A complete Sankey diagram specification. Pass to `html` or `open_in_browser` to render.
 When `nodes` are omitted, they are derived from the edges automatically via
 longest-path layering.
 """
 struct SankeySpec <: VegaVisualizerSpec
-    nodes::Vector{Node}
-    edges::Vector{Edge}
+    nodes::Vector{SankeyNode}
+    edges::Vector{SankeyEdge}
     title::String
     config::SankeyConfig
 end
 
-SankeySpec(nodes::Vector{Node}, edges::Vector{Edge};
+SankeySpec(nodes::Vector{SankeyNode}, edges::Vector{SankeyEdge};
            title::String="", config::SankeyConfig=SankeyConfig()) =
     SankeySpec(nodes, edges, title, config)
 
-SankeySpec(edges::Vector{Edge};
+SankeySpec(nodes::Vector{SankeyNode}, edges::Vector{Tuple{String,String,T}};
+           title::String="", config::SankeyConfig=SankeyConfig()) where T <: Number =
+    SankeySpec(nodes, SankeyEdge.(edges), title, config)
+
+SankeySpec(edges::Vector{SankeyEdge};
            title::String="", config::SankeyConfig=SankeyConfig()) =
     SankeySpec(nodes_from_edges(edges), edges, title, config)
+
+SankeySpec(edges::Vector{Tuple{String,String,T}};
+           title::String="", config::SankeyConfig=SankeyConfig()) where {T<:Number} =
+    SankeySpec(SankeyEdge.(edges); title, config)
+
 
 # =============================================================================
 # Core internal functions
 # =============================================================================
 
-function node_to_dict(node::Node)
+function node_to_dict(node::SankeyNode)
     d = Dict{String,Any}("category" => node.id, "stack" => node.stack)
     !isnothing(node.sort) && (d["sort"] = node.sort)
     !isnothing(node.labels) && (d["labels"] = node.labels)
@@ -91,7 +101,7 @@ function node_to_dict(node::Node)
     return d
 end
 
-function edge_to_dict(edge::Edge)
+function edge_to_dict(edge::SankeyEdge)
     Dict{String,Any}(
         "source" => edge.source,
         "destination" => edge.destination,
@@ -99,7 +109,7 @@ function edge_to_dict(edge::Edge)
     )
 end
 
-function generate_vega_data(nodes::Vector{Node}, edges::Vector{Edge})
+function generate_vega_data(nodes::Vector{SankeyNode}, edges::Vector{SankeyEdge})
     vcat(node_to_dict.(nodes), edge_to_dict.(edges))
 end
 
@@ -368,34 +378,36 @@ end
 # =============================================================================
 
 """
-    compute_stacks(node_ids::Vector{String}, edges::Vector{Edge}) -> Dict{String,Int}
+    compute_stacks(node_ids::Vector{String}, edges::Vector{SankeyEdge}) -> Dict{String,Int}
 
 Compute stack (layer) assignments for nodes based on longest path from sources.
 Returns a Dict mapping node id to stack number (1-indexed).
 """
-function compute_stacks(node_ids::Vector{String}, edges::Vector{Edge})
+function compute_stacks(node_ids::Vector{String}, edges::Vector{SankeyEdge})
     longest_path_layers(node_ids, ((e.source, e.destination) for e in edges))
 end
 
 """
-    nodes_from_edges(edges::Vector{Edge}) -> Vector{Node}
+    nodes_from_edges(edges::Vector{SankeyEdge}) -> Vector{SankeyNode}
 
-Create Node objects from edges with automatically computed stacks via longest path.
+Create `SankeyNode` objects from edges with automatically computed stacks via longest path.
+Within each stack, nodes are sort-ordered by the order in which they first appear
+in `edges` (sources before destinations). Nodes on stack 1 get left-aligned labels.
 """
-function nodes_from_edges(edges::Vector{Edge})
+function nodes_from_edges(edges::Vector{SankeyEdge})
     node_ids = unique(vcat([e.source for e in edges], [e.destination for e in edges]))
     stacks = compute_stacks(node_ids, edges)
-    min_stack = minimum(values(stacks))
 
-    by_stack = Dict{Int,Vector{String}}()
+    sort_in_stack = Dict{String,Int}()
+    stack_counts = Dict{Int,Int}()
     for id in node_ids
         s = stacks[id]
-        haskey(by_stack, s) || (by_stack[s] = String[])
-        push!(by_stack[s], id)
+        stack_counts[s] = get(stack_counts, s, 0) + 1
+        sort_in_stack[id] = stack_counts[s]
     end
 
-    [Node(id, stacks[id];
-          sort=findfirst(==(id), by_stack[stacks[id]]),
-          labels=(stacks[id] == min_stack ? "left" : nothing))
+    [SankeyNode(id, stacks[id];
+          sort=sort_in_stack[id],
+          labels=(stacks[id] == 1 ? "left" : nothing))
      for id in node_ids]
 end

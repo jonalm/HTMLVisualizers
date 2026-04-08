@@ -1,23 +1,23 @@
 
 using Test
-using HTMLVisualizers: Edge, Node, compute_stacks, nodes_from_edges
+using HTMLVisualizers: SankeyEdge, SankeyNode, compute_stacks, nodes_from_edges
 
-@testset "Sankey Module Tests" begin
+@testset "SankeySpec tests" begin
 
-    @testset "Edge construction" begin
-        e = Edge("A", "B", 100.5)
+    @testset "SankeyEdge construction" begin
+        e = SankeyEdge("A", "B", 100.5)
         @test e.source == "A"
         @test e.destination == "B"
         @test e.value == 100.5
     end
 
-    @testset "Node construction" begin
-        n = Node("Test", 1)
+    @testset "SankeyNode construction" begin
+        n = SankeyNode("Test", 1)
         @test n.id == "Test"
         @test n.stack == 1
         @test isnothing(n.sort)
 
-        n2 = Node("Test2", 2; sort=1, labels="left", gap=10)
+        n2 = SankeyNode("Test2", 2; sort=1, labels="left", gap=10)
         @test n2.sort == 1
         @test n2.labels == "left"
         @test n2.gap == 10
@@ -26,13 +26,13 @@ using HTMLVisualizers: Edge, Node, compute_stacks, nodes_from_edges
     @testset "compute_stacks delegates to longest_path_layers" begin
         # Thin wrapper: one sanity check is enough — the layering algorithm
         # itself is exercised in utils_test.jl.
-        edges = [Edge("A", "B", 1), Edge("A", "C", 1), Edge("B", "D", 1), Edge("C", "D", 1)]
+        edges = [SankeyEdge("A", "B", 1), SankeyEdge("A", "C", 1), SankeyEdge("B", "D", 1), SankeyEdge("C", "D", 1)]
         stacks = compute_stacks(["A", "B", "C", "D"], edges)
         @test stacks == Dict("A" => 1, "B" => 2, "C" => 2, "D" => 3)
     end
 
     @testset "nodes_from_edges" begin
-        edges = [Edge("X", "Y", 10), Edge("Y", "Z", 10)]
+        edges = [SankeyEdge("X", "Y", 10), SankeyEdge("Y", "Z", 10)]
         nodes = nodes_from_edges(edges)
         @test length(nodes) == 3
 

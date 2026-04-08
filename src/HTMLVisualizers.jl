@@ -2,8 +2,8 @@ module HTMLVisualizers
 
 using JSON
 
-export html, open_in_browser, vega_spec,
-       Edge, Node, SankeyConfig, SankeySpec
+export html, svg, open_in_browser, vega_spec,
+       SankeyEdge, SankeyNode, SankeyConfig, SankeySpec
 
 include("utils.jl")
 
@@ -36,6 +36,13 @@ end
 include("vega_general.jl")
 include("vega_sankey.jl")
 
-
+export 
+    html, 
+    open_in_browser,
+    svg, 
+    SankeySpec,
+    SankeyNode,
+    SankeyEdge,
+    SankeyConfig
 
 end # module HTMLVisualizers
