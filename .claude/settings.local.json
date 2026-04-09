@@ -3,7 +3,13 @@
     "allow": [
       "Bash(julia --project=. -e 'using Pkg; Pkg.test\\(\\)')",
       "Bash(julia --project=/Users/jonalmeriksen/dev/HTMLVisualizers -e ':*)",
-      "Bash(julia --project=/Users/jonalmeriksen/dev/HTMLVisualizers -e 'using Pkg; Pkg.test\\(\\)')"
+      "Bash(julia --project=/Users/jonalmeriksen/dev/HTMLVisualizers -e 'using Pkg; Pkg.test\\(\\)')",
+      "mcp__kaimon__ping",
+      "mcp__kaimon__usage_instructions",
+      "mcp__kaimon__document_symbols",
+      "mcp__kaimon__investigate_environment",
+      "mcp__kaimon__qdrant_search_code",
+      "mcp__kaimon__ex"
     ]
   }
 }

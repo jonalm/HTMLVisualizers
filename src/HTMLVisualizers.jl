@@ -3,7 +3,9 @@ module HTMLVisualizers
 using JSON
 
 export html, svg, open_in_browser, vega_spec,
-       SankeyEdge, SankeyNode, SankeyConfig, SankeySpec
+       SankeyEdge, SankeyNode, SankeyConfig, SankeySpec,
+       SquareStackTableRow, SquareStackTableColumn,
+       SquareStackTableConfig, SquareStackTableSpec
 
 include("utils.jl")
 
@@ -11,6 +13,7 @@ include("utils.jl")
 
 abstract type HTMLVisualizerSpec end
 abstract type VegaVisualizerSpec <: HTMLVisualizerSpec end
+abstract type SVGVisualizerSpec  <: HTMLVisualizerSpec end
 
 
 """
@@ -19,6 +22,13 @@ abstract type VegaVisualizerSpec <: HTMLVisualizerSpec end
 returns the html code of the plot described by `spec` as a `String`.
 """
 function html end
+
+"""
+    svg(spec::HTMLVisualizerSpec)::String
+
+returns an SVG document for the plot described by `spec` as a `String`.
+"""
+function svg end
 
 """
     open_in_browser(spec::HTMLVisualizerSpec)
@@ -35,14 +45,7 @@ end
 
 include("vega_general.jl")
 include("vega_sankey.jl")
-
-export 
-    html, 
-    open_in_browser,
-    svg, 
-    SankeySpec,
-    SankeyNode,
-    SankeyEdge,
-    SankeyConfig
+include("svg_general.jl")
+include("svg_square_stack_table.jl")
 
 end # module HTMLVisualizers
