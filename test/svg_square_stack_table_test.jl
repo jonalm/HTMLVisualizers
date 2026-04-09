@@ -616,4 +616,181 @@ using HTMLVisualizers: resolve_colors, resolve_legend_order,
         @test occursin("<title>A &amp; B &lt;C&gt;</title>", out2)
     end
 
+    @testset "max_squares_per_row wrapping" begin
+        # Round-number config so the asserted pixel coordinates are easy
+        # to read: cw_default = 5, square stride = 12, row_height = 20.
+        base_cfg(; kwargs...) = SquareStackTableConfig(;
+            font_size=10, char_width_ratio=0.5,
+            square_size=10, square_gap=2,
+            column_gap=10, row_height=20,
+            padding=(top=8, right=8, bottom=8, left=8),
+            legend_swatch_size=10, legend_row_height=12,
+            legend_gap=2, legend_bottom_margin=4,
+            kwargs...,
+        )
+
+        @testset "config field defaults to nothing" begin
+            cfg = SquareStackTableConfig()
+            @test isnothing(cfg.max_squares_per_row)
+            cfg2 = SquareStackTableConfig(max_squares_per_row=4)
+            @test cfg2.max_squares_per_row == 4
+        end
+
+        @testset "compute_column_widths: cap shrinks squares_w" begin
+            rows = [SquareStackTableRow("r", fill("a", 8))]
+            uncapped = SquareStackTableSpec(rows; config=base_cfg())
+            capped   = SquareStackTableSpec(rows; config=base_cfg(max_squares_per_row=4))
+            wu = compute_column_widths(uncapped)
+            wc = compute_column_widths(capped)
+            # 8 squares: 8*12 - 2 = 94
+            @test wu.squares_w == 94
+            @test wu.effective_per_row == 8
+            # 4 squares wide: 4*12 - 2 = 46
+            @test wc.squares_w == 46
+            @test wc.effective_per_row == 4
+        end
+
+        @testset "compute_column_widths: cap larger than data is a no-op" begin
+            rows = [SquareStackTableRow("r", fill("a", 3))]
+            spec = SquareStackTableSpec(rows; config=base_cfg(max_squares_per_row=10))
+            w = compute_column_widths(spec)
+            @test w.effective_per_row == 3      # min(10, 3)
+            @test w.squares_w == 34             # 3*12 - 2
+        end
+
+        @testset "compute_column_widths: empty rows yield effective_per_row >= 1" begin
+            spec = SquareStackTableSpec(SquareStackTableRow[];
+                config=base_cfg(max_squares_per_row=4))
+            w = compute_column_widths(spec)
+            # No data → no histogram width, but the wrap divisor must
+            # still be ≥ 1 so the emit-pass modulo is well-defined.
+            @test w.squares_w == 0
+            @test w.effective_per_row == 1
+        end
+
+        @testset "compute_layout: cap unset → 1 sub-row per data row" begin
+            rows = [
+                SquareStackTableRow("foo", ["a", "b"]),
+                SquareStackTableRow("bar", ["a"]),
+            ]
+            spec = SquareStackTableSpec(rows; config=base_cfg())
+            L = compute_layout(spec)
+            @test L.row_sub_rows == [1, 1]
+            @test L.row_tops == [L.y0, L.y0 + 20]
+            @test L.effective_per_row == 2      # max squares_content
+        end
+
+        @testset "compute_layout: cap=4 wraps a 7-square row into 2 sub-rows" begin
+            rows = [
+                SquareStackTableRow("long",  fill("a", 7)),
+                SquareStackTableRow("short", fill("a", 2)),
+            ]
+            spec = SquareStackTableSpec(rows; config=base_cfg(max_squares_per_row=4))
+            L = compute_layout(spec)
+            @test L.effective_per_row == 4
+            @test L.row_sub_rows == [2, 1]
+            @test L.row_tops[1] == L.y0
+            @test L.row_tops[2] == L.y0 + 2 * 20
+            # 3 sub-rows total of 20 px each, plus padding.bottom (8).
+            @test L.total_height == L.y0 + 3 * 20 + 8
+            # squares_w sized to the cap (4 columns), not the data (7).
+            @test L.widths.squares_w == 4 * 12 - 2
+        end
+
+        @testset "compute_layout: empty squares row still gets 1 sub-row" begin
+            rows = [
+                SquareStackTableRow("a", String[]),
+                SquareStackTableRow("b", fill("x", 6)),
+            ]
+            spec = SquareStackTableSpec(rows; config=base_cfg(max_squares_per_row=3))
+            L = compute_layout(spec)
+            # 6 squares wrap to 2 sub-rows; the empty row collapses to 1.
+            @test L.row_sub_rows == [1, 2]
+            @test L.row_tops[2] == L.y0 + 20
+        end
+
+        @testset "compute_layout: max_squares_per_row=0 raises" begin
+            spec = SquareStackTableSpec(
+                [SquareStackTableRow("r", ["a"])];
+                config=base_cfg(max_squares_per_row=0),
+            )
+            @test_throws ArgumentError compute_layout(spec)
+            spec_neg = SquareStackTableSpec(
+                [SquareStackTableRow("r", ["a"])];
+                config=base_cfg(max_squares_per_row=-3),
+            )
+            @test_throws ArgumentError compute_layout(spec_neg)
+        end
+
+        @testset "svg: wrapped row emits squares on multiple sub-rows" begin
+            # 7 squares of "a", cap=4 → expect 4 squares on the first
+            # sub-row and 3 on the second. Use a single category and
+            # disable the legend so all <rect>s are easy to count.
+            rows = [SquareStackTableRow("long", fill("a", 7))]
+            cfg  = base_cfg(max_squares_per_row=4, show_legend=false)
+            spec = SquareStackTableSpec(rows;
+                category_colors=Dict("a" => "#aaaaaa"),
+                config=cfg)
+            out = svg(spec)
+            L = compute_layout(spec)
+
+            # Pull every square <rect> (skip the background, which has
+            # the white fill).
+            sqs = [(parse(Int, m["x"]), parse(Int, m["y"]))
+                   for m in eachmatch(
+                       r"<rect x=\"(?<x>\d+)\" y=\"(?<y>\d+)\"[^>]*fill=\"#aaaaaa\"",
+                       out)]
+            @test length(sqs) == 7
+
+            # First 4 squares share the top sub-row's y; their x values
+            # restart from hist_x and step by stride.
+            stride = cfg.square_size + cfg.square_gap   # = 12
+            sq_offset = (cfg.row_height - cfg.square_size) ÷ 2
+            top_y    = L.row_tops[1] + sq_offset
+            wrap_y   = L.row_tops[1] + cfg.row_height + sq_offset
+            @test [s[2] for s in sqs[1:4]] == fill(top_y, 4)
+            @test [s[1] for s in sqs[1:4]] == [L.hist_x + i*stride for i in 0:3]
+            # Wrapped sub-row: 3 squares, y advanced by row_height,
+            # x restarting from hist_x.
+            @test [s[2] for s in sqs[5:7]] == fill(wrap_y, 3)
+            @test [s[1] for s in sqs[5:7]] == [L.hist_x + i*stride for i in 0:2]
+        end
+
+        @testset "svg: label and extras text align with the top sub-row" begin
+            rows = [SquareStackTableRow("long", fill("a", 7); extras=Any[42])]
+            cols = [SquareStackTableColumn("count", :right)]
+            cfg  = base_cfg(max_squares_per_row=4, show_legend=false)
+            spec = SquareStackTableSpec(rows; columns=cols, config=cfg)
+            out = svg(spec)
+            L = compute_layout(spec)
+
+            # The label "long" and the extras "42" should both sit at
+            # row_tops[1] + row_height ÷ 2 — the centre of the FIRST
+            # sub-row, not the centre of the (taller) full band.
+            top_text_y = L.row_tops[1] + cfg.row_height ÷ 2
+
+            label_m = match(r"<text x=\"\d+\" y=\"(?<y>\d+)\"[^>]*>long</text>", out)
+            @test label_m !== nothing
+            @test parse(Int, label_m["y"]) == top_text_y
+
+            extras_m = match(r"<text x=\"\d+\" y=\"(?<y>\d+)\"[^>]*>42</text>", out)
+            @test extras_m !== nothing
+            @test parse(Int, extras_m["y"]) == top_text_y
+        end
+
+        @testset "svg: cap unset matches a control spec byte-for-byte" begin
+            # Sanity check the un-wrapped path is untouched: explicit
+            # nothing must produce identical output to the default.
+            rows = [
+                SquareStackTableRow("foo", ["a", "b", "a"]),
+                SquareStackTableRow("bar", ["b"]),
+            ]
+            control = SquareStackTableSpec(rows;
+                config=SquareStackTableConfig())
+            explicit = SquareStackTableSpec(rows;
+                config=SquareStackTableConfig(max_squares_per_row=nothing))
+            @test svg(control) == svg(explicit)
+        end
+    end
+
 end

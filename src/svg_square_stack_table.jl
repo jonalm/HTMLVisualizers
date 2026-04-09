@@ -76,6 +76,11 @@ Base.@kwdef struct SquareStackTableConfig
     square_gap::Int  = 4
     column_gap::Int  = 20
 
+    # Histogram wrap. When set, any row whose square count exceeds this
+    # value wraps onto additional sub-rows of `row_height` pixels each.
+    # `nothing` (default) disables wrapping. Must be ≥ 1 when set.
+    max_squares_per_row::Union{Int,Nothing} = nothing
+
     # Chrome
     padding::NamedTuple{(:top, :right, :bottom, :left),NTuple{4,Int}} =
         (top=20, right=20, bottom=20, left=20)
@@ -242,7 +247,8 @@ end
 
 """
     compute_column_widths(spec::SquareStackTableSpec)
-        -> (label_w::Int, squares_w::Int, extras_w::Vector{Int})
+        -> (label_w::Int, squares_w::Int, extras_w::Vector{Int},
+            effective_per_row::Int)
 
 Compute the pixel widths of every data column. All widths are integers
 (rounded up via `ceil`) so downstream layout math stays in integer
@@ -252,6 +258,11 @@ across platforms.
 When `config.show_header` is false, header text is excluded from the
 max-width calculation entirely (it isn't drawn, so it shouldn't inflate
 column widths).
+
+`effective_per_row` is the histogram column's *visible* width measured
+in squares: it equals `min(config.max_squares_per_row, max_data_squares)`
+when the cap is set, or `max_data_squares` (clamped to ≥ 1) when it
+isn't. The render pass uses it as the wrap divisor for square placement.
 """
 function compute_column_widths(spec::SquareStackTableSpec)
     config = spec.config
@@ -267,10 +278,15 @@ function compute_column_widths(spec::SquareStackTableSpec)
     label_w = ceil(Int, max(hlen(spec.label_header), label_content) * cw_label)
 
     squares_content = maximum((length(r.squares) for r in rows); init=0)
-    squares_w_from_data = squares_content == 0 ? 0 :
-        squares_content * (config.square_size + config.square_gap) - config.square_gap
+    cap = config.max_squares_per_row
+    visible_squares = isnothing(cap) ? squares_content : min(cap, squares_content)
+    squares_w_from_data = visible_squares == 0 ? 0 :
+        visible_squares * (config.square_size + config.square_gap) - config.square_gap
     squares_w_from_header = ceil(Int, hlen(spec.histogram_header) * cw_default)
     squares_w = max(squares_w_from_header, squares_w_from_data)
+    # Divisor for the emit-pass wrap math. Must be ≥ 1 so the modulo
+    # arithmetic is well-defined even when there is no square data.
+    effective_per_row = max(visible_squares, 1)
 
     extras_w = Int[]
     for (k, col) in enumerate(spec.columns)
@@ -279,7 +295,8 @@ function compute_column_widths(spec::SquareStackTableSpec)
         push!(extras_w, ceil(Int, max(hlen(col.header), content_max) * cw))
     end
 
-    return (label_w=label_w, squares_w=squares_w, extras_w=extras_w)
+    return (label_w=label_w, squares_w=squares_w, extras_w=extras_w,
+            effective_per_row=effective_per_row)
 end
 
 # =============================================================================
@@ -300,6 +317,10 @@ categories appear in the data.
 """
 function compute_layout(spec::SquareStackTableSpec)
     config = spec.config
+    if !isnothing(config.max_squares_per_row) && config.max_squares_per_row < 1
+        throw(ArgumentError(
+            "SquareStackTableConfig.max_squares_per_row must be ≥ 1 when set, got $(config.max_squares_per_row)"))
+    end
     widths = compute_column_widths(spec)
     legend_entries = resolve_legend_order(spec)
 
@@ -340,7 +361,20 @@ function compute_layout(spec::SquareStackTableSpec)
     header_y   = legend_y0 + legend_h
     header_h   = config.show_header ? config.row_height : 0
     y0         = header_y + header_h
-    total_height = y0 + length(spec.rows) * config.row_height + config.padding.bottom
+
+    # Per-row sub-row counts: a row with N squares occupies
+    # max(1, cld(N, effective_per_row)) sub-rows of `row_height` each.
+    # Each sub-row beyond the first comes from histogram wrap; the label
+    # and extras text always sit centred in the FIRST sub-row.
+    per_row = widths.effective_per_row
+    row_sub_rows = Int[max(1, cld(length(r.squares), per_row)) for r in spec.rows]
+    row_tops = Vector{Int}(undef, length(spec.rows))
+    cursor_y = y0
+    for (i, n) in enumerate(row_sub_rows)
+        row_tops[i] = cursor_y
+        cursor_y += n * config.row_height
+    end
+    total_height = cursor_y + config.padding.bottom
 
     return (
         widths        = widths,
@@ -359,6 +393,9 @@ function compute_layout(spec::SquareStackTableSpec)
         header_y      = header_y,
         header_h      = header_h,
         y0            = y0,
+        row_tops      = row_tops,
+        row_sub_rows  = row_sub_rows,
+        effective_per_row = per_row,
         total_height  = total_height,
     )
 end
@@ -529,10 +566,14 @@ function svg(spec::SquareStackTableSpec)
     end
 
     # ---- Data rows ----
+    per_row = L.effective_per_row
+    sq_offset = (config.row_height - config.square_size) ÷ 2
     for (i, row) in enumerate(spec.rows)
-        row_top = L.y0 + (i - 1) * config.row_height
+        row_top = L.row_tops[i]
+        # Text y is centred in the FIRST sub-row of the band so labels
+        # and extras stay aligned with the top row of squares even when
+        # the histogram wraps onto multiple sub-rows.
         text_y  = row_top + config.row_height ÷ 2
-        sq_y    = row_top + (config.row_height - config.square_size) ÷ 2
 
         # Label
         _text!(io, L.label_x, text_y, row.label;
@@ -542,11 +583,16 @@ function svg(spec::SquareStackTableSpec)
             text_anchor = "end")
 
         # Squares — grouped by category in legend order so similar
-        # colors land next to each other.
+        # colors land next to each other. When the row's square count
+        # exceeds `per_row`, additional squares wrap onto sub-rows of
+        # `row_height` pixels each.
         for (j, cat) in enumerate(sort_squares_for_render(row.squares, L.legend_entries))
-            sx = L.hist_x + (j - 1) * (config.square_size + config.square_gap)
+            col    = (j - 1) % per_row
+            subrow = (j - 1) ÷ per_row
+            sx = L.hist_x + col * (config.square_size + config.square_gap)
+            sy = row_top + subrow * config.row_height + sq_offset
             print(io, "  <rect x=\"", sx,
-                      "\" y=\"", sq_y,
+                      "\" y=\"", sy,
                       "\" width=\"", config.square_size,
                       "\" height=\"", config.square_size,
                       "\" fill=\"", colors[cat], "\"/>\n")

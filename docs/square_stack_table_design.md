@@ -475,6 +475,43 @@ free-standing block pinned to the left margin. It only affects
 `total_width` if the longest legend entry exceeds the table's own width
 (handled by the `max(...)` above).
 
+#### Histogram wrap (`max_squares_per_row`)
+
+`SquareStackTableConfig.max_squares_per_row::Union{Int,Nothing}` caps
+the histogram column's *visible* width in squares. `nothing` (the
+default) disables wrapping entirely; un-capped output is byte-for-byte
+identical to the pre-wrap implementation. When set, any row whose
+`length(squares)` exceeds the cap wraps onto additional sub-rows of
+`row_height` pixels each — only the affected row grows taller, neighbours
+are unchanged.
+
+The layout pre-pass derives three values for the emit pass:
+
+- `effective_per_row = min(max_squares_per_row, max_data_squares)` when
+  the cap is set; equals `max_data_squares` (clamped to ≥ 1) when it
+  isn't. Used as the wrap divisor and as the column-count input to
+  `squares_w_from_data`. Clamping to `min(...)` means a cap larger than
+  the longest row is a no-op, and clamping to `≥ 1` keeps the modulo
+  arithmetic well-defined when there are no squares anywhere.
+- `row_sub_rows[i] = max(1, cld(length(rows[i].squares), effective_per_row))`.
+- `row_tops[i]` — cumulative `y0 + Σ row_sub_rows[1:i-1] * row_height`.
+  Replaces the inline `y0 + (i-1)*row_height` formula in the emit loop.
+
+Validation: `compute_layout` raises `ArgumentError` when
+`max_squares_per_row` is set to a value `< 1`.
+
+The square emit loop computes per-square placement as
+`col = (j-1) % effective_per_row`,
+`subrow = (j-1) ÷ effective_per_row`,
+`sx = hist_x + col * (square_size + square_gap)`,
+`sy = row_top + subrow * row_height + (row_height - square_size) ÷ 2`.
+
+**Text alignment in tall rows.** The label and extras `<text>` elements
+of a wrapped row sit at `row_top + row_height ÷ 2` — the centre of the
+*first* sub-row, not the centre of the full (taller) band. This keeps
+the text visually anchored to the top row of squares, which is the
+behaviour the feature was specced for.
+
 ### 5. Emit SVG
 
 Structure (in draw order, top to bottom):
@@ -704,7 +741,6 @@ Out of scope for v1 (note in the doc, don't block shipping):
 - Interactive tooltips / hover states
 - Horizontal legend layout (v1 is vertical, pinned above the header)
 - Row sorting by histogram length
-- Wrap-around for very long histograms
 - Runtime text measurement for proportional fonts (v1 uses a
   per-column `char_width_ratio` approximation instead)
 - `Printf`-style numeric formatting (v1 uses `string(x)` for extras)

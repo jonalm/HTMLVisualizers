@@ -1,6 +1,6 @@
 name = "HTMLVisualizers"
 uuid = "355f4dba-f457-4904-b421-9a36b98c3c66"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Jon Alm Eriksen <jon.alm.eriksen@protonmail.com>"]
 
 [deps]

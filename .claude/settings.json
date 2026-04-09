@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "mcp__kaimon__run_tests",
-      "mcp__kaimon__manage_repl"
+      "mcp__kaimon__manage_repl",
+      "Bash(julia --project=. -e ':*)"
     ]
   }
 }
