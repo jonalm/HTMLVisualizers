@@ -4,6 +4,7 @@ using JSON
 
 export html, svg, open_in_browser, vega_spec,
        SankeyEdge, SankeyNode, SankeyConfig, SankeySpec,
+       SparseMatrixCell, SparseMatrixConfig, SparseMatrixSpec,
        SquareStackTableRow, SquareStackTableColumn,
        SquareStackTableConfig, SquareStackTableSpec
 
@@ -45,6 +46,8 @@ end
 
 include("vega_general.jl")
 include("vega_sankey.jl")
+include("vega_sparse_matrix.jl")
+include("sparse_matrix_helpers.jl")
 include("svg_general.jl")
 include("svg_square_stack_table.jl")
 

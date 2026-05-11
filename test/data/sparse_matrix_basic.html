@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>sparse basic</title>
+  <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    #vis {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div id="vis"></div>
+  <script>
+    const spec = {"$schema":"https://vega.github.io/schema/vega/v5.json","background":"#fafafa","config":{"text":{"fill":"#333333","fontSize":12},"view":{"stroke":"transparent"}},"data":[{"name":"cellData","values":[{"color":"#FF0000","column":"x","row":"A","value":1.0},{"color":"#FFA500","column":"y","row":"A","value":2.0},{"color":"#008000","column":"x","row":"B"},{"color":"#0000FF","column":"z","row":"C","value":"tag"}]},{"name":"rowIndex","on":[{"modify":"rowSrc","trigger":"rowSrc && rowDest && rowSrc.name != rowDest.name","values":"{i: rowDest.i}"},{"modify":"rowDest","trigger":"rowSrc && rowDest && rowSrc.name != rowDest.name","values":"{i: rowSrc.i}"}],"values":[{"i":0,"name":"A"},{"i":1,"name":"B"},{"i":2,"name":"C"}]},{"name":"colIndex","on":[{"modify":"colSrc","trigger":"colSrc && colDest && colSrc.name != colDest.name","values":"{i: colDest.i}"},{"modify":"colDest","trigger":"colSrc && colDest && colSrc.name != colDest.name","values":"{i: colSrc.i}"}],"values":[{"i":0,"name":"x"},{"i":1,"name":"y"},{"i":2,"name":"z"}]}],"description":"Reorderable Sparse Matrix","height":600,"marks":[{"encode":{"update":{"fill":{"value":"#ffd54f"},"fillOpacity":{"signal":"rowActive != null ? 0.25 : 0"},"height":{"signal":"bandwidth('yScale')"},"width":{"signal":"width"},"x":{"value":0},"y":{"signal":"rowActive != null ? scale('yScale', rowActive) : 0"}}},"interactive":false,"type":"rect"},{"encode":{"update":{"fill":{"value":"#ffd54f"},"fillOpacity":{"signal":"colActive != null ? 0.25 : 0"},"height":{"signal":"height"},"width":{"signal":"bandwidth('xScale')"},"x":{"signal":"colActive != null ? scale('xScale', colActive) : 0"},"y":{"value":0}}},"interactive":false,"type":"rect"},{"encode":{"update":{"fill":{"field":"color"},"fillOpacity":{"signal":"indata('rowIndex','name',datum.row) && indata('colIndex','name',datum.column) ? 1 : 0"},"height":{"signal":"bandwidth('yScale')"},"stroke":{"value":"#ffffff"},"strokeWidth":{"value":1.0},"tooltip":{"signal":"!anyDragging && datum.value != null ? datum.value : null"},"width":{"signal":"bandwidth('xScale')"},"x":{"field":"column","scale":"xScale"},"y":{"field":"row","scale":"yScale"}}},"from":{"data":"cellData"},"name":"cells","type":"rect"},{"encode":{"update":{"align":{"value":"right"},"baseline":{"value":"middle"},"cursor":{"signal":"anyDragging ? 'grabbing' : 'grab'"},"fontSize":{"value":12},"text":{"field":"name"},"x":{"value":-8},"y":{"band":0.5,"field":"name","scale":"yScale"}}},"from":{"data":"rowIndex"},"name":"rowLabels","type":"text"},{"encode":{"update":{"align":{"value":"left"},"angle":{"value":-90},"baseline":{"value":"middle"},"cursor":{"signal":"anyDragging ? 'grabbing' : 'grab'"},"fontSize":{"value":12},"text":{"field":"name"},"x":{"band":0.5,"field":"name","scale":"xScale"},"y":{"value":-8}}},"from":{"data":"colIndex"},"name":"colLabels","type":"text"}],"padding":{"bottom":20,"left":120,"right":20,"top":80},"scales":[{"domain":{"data":"colIndex","field":"name","sort":{"field":"i","order":"ascending"}},"name":"xScale","paddingInner":0.05,"range":"width","type":"band"},{"domain":{"data":"rowIndex","field":"name","sort":{"field":"i","order":"ascending"}},"name":"yScale","paddingInner":0.05,"range":"height","type":"band"}],"signals":[{"name":"rowSrc","on":[{"events":"@rowLabels:mousedown","update":"datum"},{"events":"@rowLabels:mouseover","update":"rowSrc ? datum : rowSrc"},{"events":"window:mouseup","update":"null"}],"value":null},{"name":"rowDest","on":[{"events":"@rowLabels:mouseover","update":"rowSrc ? datum : null"},{"events":"window:mouseup","update":"null"}],"value":null},{"name":"rowActive","on":[{"events":"@rowLabels:mouseover","update":"datum.name"},{"events":"@rowLabels:mouseout","update":"null"},{"events":"@cells:mouseover","update":"datum.row"},{"events":"@cells:mouseout","update":"null"}],"value":null},{"name":"colSrc","on":[{"events":"@colLabels:mousedown","update":"datum"},{"events":"@colLabels:mouseover","update":"colSrc ? datum : colSrc"},{"events":"window:mouseup","update":"null"}],"value":null},{"name":"colDest","on":[{"events":"@colLabels:mouseover","update":"colSrc ? datum : null"},{"events":"window:mouseup","update":"null"}],"value":null},{"name":"colActive","on":[{"events":"@colLabels:mouseover","update":"datum.name"},{"events":"@colLabels:mouseout","update":"null"},{"events":"@cells:mouseover","update":"datum.column"},{"events":"@cells:mouseout","update":"null"}],"value":null},{"name":"anyDragging","update":"rowSrc != null || colSrc != null"}],"title":{"color":"#005ca5","fontSize":24,"fontWeight":"bold","offset":30,"text":"sparse basic"},"width":600};
+    vegaEmbed('#vis', spec, {
+      renderer: 'svg',
+      actions: { export: true, source: false, compiled: false, editor: true }
+    }).catch(console.error);
+  </script>
+</body>
+</html>
